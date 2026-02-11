@@ -1,12 +1,18 @@
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import 'streamdown/styles.css'
-
 import appCss from '../styles.css?url'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import type { QueryClient } from '@tanstack/react-query'
+import { Toaster } from '@/components/ui/sonner'
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
   head: () => ({
     meta: [
       {
@@ -27,6 +33,7 @@ export const Route = createRootRoute({
       },
     ],
   }),
+  notFoundComponent: () => <div>Page not found</div>,
 
   shellComponent: RootDocument,
 })
@@ -38,7 +45,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        {children}
+        <Toaster />
         <TanStackDevtools
           config={{
             position: 'bottom-right',

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "primeng": {
+      "enabled": true,
+      "type": "local",
+      "command": ["npx", "-y", "@primeng/mcp"]
+    },
+    "mysql": {
+      "enabled": true,
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@berthojoris/mcp-mysql-server",
+        "mysql://postgres:postgres@localhost:3306/agrotrace",
+        "list,read,utility",
+        "database_discovery,custom_queries,schema_management,index_management,constraint_management,table_maintenance,query_optimization,analysis"
+      ]
+    }
+  }
+}
