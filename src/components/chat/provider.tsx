@@ -117,13 +117,21 @@ export function ChatProvider({ conversationId, children }: ChatProviderProps) {
     () => conversationId,
   )
   const [userQuery, setUserQuery] = useState('')
+  const activeConversationIdRef = useRef(activeConversationId)
   const skipNextConversationSyncRef = useRef(false)
   const didHydrateConversationsRef = useRef(false)
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
+        body: () => ({
+          conversationId: activeConversationIdRef.current,
+        }),
       }),
     [],
   )

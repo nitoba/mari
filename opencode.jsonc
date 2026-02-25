@@ -1,10 +1,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "primeng": {
-      "enabled": true,
-      "type": "local",
-      "command": ["npx", "-y", "@primeng/mcp"]
+    "fetch": {
+      "url": "https://remote.mcpservers.org/fetch/mcp",
+      "type": "remote",
     },
     "mysql": {
       "enabled": true,
@@ -15,8 +14,8 @@
         "@berthojoris/mcp-mysql-server",
         "mysql://postgres:postgres@localhost:3306/agrotrace",
         "list,read,utility",
-        "database_discovery,custom_queries,schema_management,index_management,constraint_management,table_maintenance,query_optimization,analysis"
-      ]
-    }
-  }
+        "database_discovery,custom_queries,schema_management,index_management,constraint_management,table_maintenance,query_optimization,analysis",
+      ],
+    },
+  },
 }

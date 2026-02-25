@@ -7,6 +7,20 @@ import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
 const config = defineConfig({
+  optimizeDeps: {
+    exclude: [
+      '@mariozechner/pi-coding-agent',
+      '@mariozechner/clipboard',
+      'koffi',
+    ],
+  },
+  ssr: {
+    external: [
+      '@mariozechner/pi-coding-agent',
+      '@mariozechner/clipboard',
+      'koffi',
+    ],
+  },
   plugins: [
     devtools(),
     nitro(),

@@ -1,0 +1,31 @@
+{
+  "settings": {
+    "idleTimeoutMinutes": 10
+  },
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/var/home/nitoba/Documents/repos/ibs/mari"
+      ],
+      "env": {},
+      "lifecycle": "lazy",
+      "exposeResources": true,
+      "debug": false
+    },
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "transport": "streamable-http",
+      "auth": "bearer",
+      "bearerTokenEnv": "CONTEXT7_API_KEY",
+      "headers": {},
+      "args": [],
+      "env": {},
+      "lifecycle": "lazy",
+      "exposeResources": false,
+      "debug": false
+    }
+  }
+}

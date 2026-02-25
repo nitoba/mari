@@ -1,7 +1,5 @@
 'use client'
 
-import { Message } from '../prompt-kit/message'
-import { TextShimmer } from '../prompt-kit/text-shimmer'
 import {
   ErrorMessage,
   LoadingMessage,

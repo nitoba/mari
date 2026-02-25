@@ -14,6 +14,10 @@ export function PromptInput() {
   const { isLoading, userQuery, setUserQuery, submitUserQuery } =
     useChatContext()
 
+  console.log('PromptInput render', { isLoading, userQuery })
+
+  const isDisabled = isLoading || userQuery.trim() === ''
+
   return (
     <PromptInputKit
       isLoading={isLoading}
@@ -70,11 +74,11 @@ export function PromptInput() {
 
             <Button
               size="icon"
-              disabled={!userQuery.trim() || isLoading}
+              disabled={isDisabled}
               onClick={submitUserQuery}
               className="size-9 rounded-full"
             >
-              {isLoading ? (
+              {!isLoading ? (
                 <ArrowUp size={18} />
               ) : (
                 <span className="size-3 rounded-xs bg-white" />
