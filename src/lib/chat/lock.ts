@@ -1,10 +1,10 @@
 // db/lock.ts
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { db } from '../db/db'
 import { chatSessions } from '../db/schema/chat'
-import { and, eq, lt, or, isNull } from 'drizzle-orm'
 
 export async function acquireDbSessionLock(params: {
-  userId: string
+  userId: number
   sessionId: string
   lockToken: string // gere no handler (ex.: crypto.randomUUID())
   ttlMs: number // ex.: 120_000
@@ -37,7 +37,7 @@ export async function acquireDbSessionLock(params: {
 }
 
 export async function releaseDbSessionLock(params: {
-  userId: string
+  userId: number
   sessionId: string
   lockToken: string
 }) {

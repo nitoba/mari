@@ -122,7 +122,7 @@ async function getConversationPreview(
     .limit(1)
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (row === null) return null
+  if (row === undefined) return null
 
   const text = extractTextFromPiAgentMessage(row.content)
   return text || null
@@ -232,6 +232,7 @@ const getConversationMessagesServerFn = createServerFn({ method: 'GET' })
   })
 
 const createConversationInput = z.object({
+  conversationId: z.string().uuid().optional(),
   title: z.string().trim().min(1).max(80).optional(),
 })
 
@@ -240,20 +241,29 @@ const createConversationServerFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const userId = await getUserIdOrThrow()
     const now = new Date()
-    const sessionId = randomUUID()
+    const sessionId = data.conversationId ?? randomUUID()
 
-    await db.insert(chatSessions).values({
-      id: sessionId,
-      userId,
-      title: data.title ?? DEFAULT_CONVERSATION_TITLE,
-      createdAt: now,
-      updatedAt: now,
-      nextSeq: 0,
-      meta: null,
-      lockToken: null,
-      lockUntil: null,
-      summarySeq: -1,
-    })
+    await db
+      .insert(chatSessions)
+      .values({
+        id: sessionId,
+        userId,
+        title: data.title ?? DEFAULT_CONVERSATION_TITLE,
+        createdAt: now,
+        updatedAt: now,
+        nextSeq: 0,
+        meta: null,
+        lockToken: null,
+        lockUntil: null,
+        summarySeq: -1,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          // mantém o registro existente, só atualiza "updatedAt" e (opcionalmente) title
+          updatedAt: now,
+          title: data.title ?? DEFAULT_CONVERSATION_TITLE,
+        },
+      })
 
     const created: ChatConversationSummary = {
       id: sessionId,
@@ -381,8 +391,10 @@ export const chatConversationMessagesQueryOptions = (conversationId: string) =>
     gcTime: 5 * 60_000,
   })
 
-export const createChatConversationMutation = (input?: { title?: string }) =>
-  createConversationServerFn({ data: input ?? {} })
+export const createChatConversationMutation = (input?: {
+  title?: string
+  conversationId?: string
+}) => createConversationServerFn({ data: input ?? {} })
 
 export const renameChatConversationMutation = (input: {
   conversationId: string

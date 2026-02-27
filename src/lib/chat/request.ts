@@ -1,13 +1,14 @@
-import type { UIMessage } from 'ai'
-import type { PiModelSelection } from '@/lib/pi-agent/runtime'
-import { PI_THINKING_LEVELS } from '@/lib/pi-agent/runtime'
-import { VALID_THINKING_LEVELS } from './types'
 import { randomUUID } from 'node:crypto'
+import { VALID_THINKING_LEVELS } from './types'
+import type { UIMessage } from 'ai'
+import type {
+  PI_THINKING_LEVELS,
+  PiModelSelection,
+} from '@/lib/pi-agent/runtime'
 
 export type ParsedChatRequest = {
   sessionId: string
   requestId: string
-  userId: string
   messages: Array<UIMessage>
   modelSelection?: PiModelSelection
 }
@@ -39,12 +40,6 @@ const parseModelSelection = (body: {
     modelId: normalizedModelId || undefined,
     thinkingLevel,
   }
-}
-
-export const getUserId = (request: Request): string => {
-  const headerUser = request.headers.get('x-user-id')
-  if (headerUser && headerUser.trim()) return headerUser.trim()
-  return '1'
 }
 
 export const getMessageText = (message: UIMessage): string =>
@@ -80,8 +75,6 @@ export const parseChatRequest = async (
       ? body.requestId.trim()
       : ''
 
-  const userId = getUserId(request)
-
   if (!requestId) {
     return { error: 'Missing requestId', status: 400 }
   }
@@ -89,7 +82,6 @@ export const parseChatRequest = async (
   return {
     sessionId,
     requestId,
-    userId,
     messages,
     modelSelection,
   }

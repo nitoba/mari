@@ -1,13 +1,17 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 // chat/summarize.ts
-import { db } from '@/lib/db/db'
-import { chatMessages, chatSessions } from '@/lib/db/schema/chat'
-import { chatSessionSummaries } from '@/lib/db/schema/chat'
-import { and, asc, eq, gt, lte } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
+import { and, asc, eq, gt, lte } from 'drizzle-orm'
 import {
-  createAgentSession,
   SessionManager,
+  createAgentSession,
 } from '@mariozechner/pi-coding-agent'
+import { db } from '@/lib/db/db'
+import {
+  chatMessages,
+  chatSessionSummaries,
+  chatSessions,
+} from '@/lib/db/schema/chat'
 
 type AgentMessage = any
 
@@ -27,7 +31,7 @@ function makeSummarySystemPrompt(): AgentMessage {
 }
 
 export async function maybeSummarizeSession(params: {
-  userId: string
+  userId: number
   sessionId: string
   // quantas mensagens manter fora do summary
   tailKeep: number // ex.: 80
@@ -75,7 +79,7 @@ export async function maybeSummarizeSession(params: {
 
   if (rowsToSummarize.length === 0) return
 
-  const toSummarize: AgentMessage[] = rowsToSummarize.map((r) => r.content)
+  const toSummarize: Array<AgentMessage> = rowsToSummarize.map((r) => r.content)
 
   // cria uma sessão “summarizer”
   const sumSession = await createAgentSession({
@@ -84,15 +88,18 @@ export async function maybeSummarizeSession(params: {
   })
 
   // seed: system summary prompt + histórico a resumir
-  sumSession.agent.replaceMessages([makeSummarySystemPrompt(), ...toSummarize])
+  sumSession.session.agent.replaceMessages([
+    makeSummarySystemPrompt(),
+    ...toSummarize,
+  ])
 
   let finalAssistant: AgentMessage | null = null
-  const unsub = sumSession.subscribe((event: any) => {
+  const unsub = sumSession.session.subscribe((event: any) => {
     if (event.type === 'turn_end') finalAssistant = event.message ?? null
   })
 
   try {
-    await sumSession.prompt('Gere o resumo agora.')
+    await sumSession.session.prompt('Gere o resumo agora.')
   } finally {
     unsub()
   }

@@ -1,11 +1,14 @@
 // db/context.ts
-import { db } from '../db/db'
-import { chatMessages, chatSessions } from '../db/schema/chat'
-import { chatSessionSummaries } from '../db/schema/chat' // ajuste import
 import { and, asc, eq, gt } from 'drizzle-orm'
+import { db } from '../db/db'
+import {
+  chatMessages,
+  chatSessionSummaries,
+  chatSessions,
+} from '../db/schema/chat'
 
 export async function loadContextForAgent(params: {
-  userId: string
+  userId: number
   sessionId: string
   tailLimit: number // ex.: 80
 }) {
@@ -20,6 +23,7 @@ export async function loadContextForAgent(params: {
     )
     .limit(1)
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (!sess) throw new Error('SESSION_NOT_FOUND')
 
   // 1) pega o último summary (se existir)
@@ -37,7 +41,7 @@ export async function loadContextForAgent(params: {
       )
       .limit(1)
 
-    summaryMessage = sum?.summaryMessage ?? null
+    summaryMessage = sum.summaryMessage ?? null
   }
 
   // 2) pega tail (mensagens após summarySeq)
@@ -56,6 +60,7 @@ export async function loadContextForAgent(params: {
 
   const messages = []
   if (summaryMessage) messages.push(summaryMessage)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (tailRows) messages.push(...tailRows.map((r) => r.content))
 
   return { messages, summarySeq: sess.summarySeq }

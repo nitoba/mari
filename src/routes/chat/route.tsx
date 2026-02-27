@@ -9,6 +9,8 @@ import { authClient } from '@/lib/auth-client'
 
 export const Route = createFileRoute('/chat')({
   beforeLoad: async () => {
+    if (typeof window === 'undefined') return
+
     const session = await authClient.getSession()
     if (!session.data) {
       throw redirect({ to: '/auth/login' })

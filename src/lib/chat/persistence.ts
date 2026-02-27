@@ -1,17 +1,18 @@
 // db/persistence.ts
-import { db } from '../db/db'
-import { chatMessages, chatSessions, ChatRole } from '../db/schema/chat'
-import { and, desc, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
+import { and, desc, eq } from 'drizzle-orm'
+import { db } from '../db/db'
+import { chatMessages, chatSessions } from '../db/schema/chat'
+import type { ChatRole } from '../db/schema/chat'
 
-export async function getOrCreateDbSession(userId: string, sessionId: string) {
+export async function getOrCreateDbSession(userId: number, sessionId: string) {
   const [sess] = await db
     .select()
     .from(chatSessions)
     .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, userId)))
-    .limit(1)
 
-  if (sess) return sess
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (sess !== undefined && sess !== null) return sess
 
   await db.insert(chatSessions).values({
     id: sessionId,
@@ -31,7 +32,7 @@ export async function getOrCreateDbSession(userId: string, sessionId: string) {
 }
 
 export async function loadHistory(
-  userId: string,
+  userId: number,
   sessionId: string,
   limit = 80,
 ) {
@@ -52,7 +53,7 @@ export async function loadHistory(
 }
 
 export async function findCachedTurnByRequestId(
-  userId: string,
+  userId: number,
   sessionId: string,
   requestId: string,
 ) {
@@ -88,7 +89,7 @@ export async function findCachedTurnByRequestId(
 }
 
 export async function appendMessage(params: {
-  userId: string
+  userId: number
   sessionId: string
   role: ChatRole
   content: any // AgentMessage (JSON)
@@ -107,6 +108,7 @@ export async function appendMessage(params: {
       )
       .for('update')
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (!sess) throw new Error('SESSION_NOT_FOUND')
 
     const seq = sess.nextSeq

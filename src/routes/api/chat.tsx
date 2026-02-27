@@ -22,8 +22,21 @@ import {
   createCachedResponseStream,
 } from '@/lib/chat/cached'
 import { setupAgentSession } from '@/lib/chat/session'
+import { auth } from '@/lib/auth'
 
 const LOCK_TTL_MS = 120_000
+
+async function getUserId(request: Request): Promise<number> {
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  })
+
+  if (!session) {
+    throw new Error('Unauthorized')
+  }
+
+  return session.user.id
+}
 
 export const Route = createFileRoute('/api/chat')({
   server: {
@@ -38,8 +51,9 @@ export const Route = createFileRoute('/api/chat')({
           })
         }
 
-        const { sessionId, requestId, userId, messages, modelSelection } =
-          parsed
+        const { sessionId, requestId, messages, modelSelection } = parsed
+
+        const userId = await getUserId(request)
 
         const { id: dbSessionId } = await getOrCreateDbSession(
           userId,

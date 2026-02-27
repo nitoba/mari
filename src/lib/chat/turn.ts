@@ -1,5 +1,5 @@
-import { and, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
+import { and, eq } from 'drizzle-orm'
 import { db } from '../db/db'
 import { chatMessages, chatSessions } from '../db/schema/chat'
 
@@ -7,13 +7,13 @@ type AgentMessage = any
 type ChatRole = 'user' | 'assistant' | 'toolResult'
 
 export async function appendTurn(params: {
-  userId: string
+  userId: number
   sessionId: string
   requestId: string
 
   userText: string
   assistantMessage: AgentMessage | null
-  toolResults: AgentMessage[]
+  toolResults: Array<AgentMessage>
 }) {
   const now = new Date()
 
@@ -51,6 +51,7 @@ export async function appendTurn(params: {
       )
       .for('update')
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (!sess) throw new Error('SESSION_NOT_FOUND')
 
     const startSeq = sess.nextSeq

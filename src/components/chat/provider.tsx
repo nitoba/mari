@@ -125,12 +125,16 @@ export function ChatProvider({ conversationId, children }: ChatProviderProps) {
     activeConversationIdRef.current = activeConversationId
   }, [activeConversationId])
 
+  const makeRequestId = () => crypto.randomUUID()
+  const makeConversationId = () => crypto.randomUUID()
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
         body: () => ({
-          conversationId: activeConversationIdRef.current,
+          sessionId: activeConversationIdRef.current,
+          requestId: makeRequestId(),
         }),
       }),
     [],
@@ -164,7 +168,7 @@ export function ChatProvider({ conversationId, children }: ChatProviderProps) {
   )
 
   const createConversationMutation = useMutation({
-    mutationFn: (input: { title?: string }) =>
+    mutationFn: (input: { title?: string; conversationId?: string }) =>
       createChatConversationMutation(input),
   })
 
@@ -340,8 +344,14 @@ export function ChatProvider({ conversationId, children }: ChatProviderProps) {
     stop()
     clearError()
 
+    // ✅ idempotência: client gera um conversationId fixo para esta criação
+    const clientConversationId = makeConversationId()
+
     createConversationMutation.mutate(
-      { title: DEFAULT_CONVERSATION_TITLE },
+      {
+        title: DEFAULT_CONVERSATION_TITLE,
+        conversationId: clientConversationId,
+      },
       {
         onSuccess: (createdConversation) => {
           toast.success('Conversation created')
