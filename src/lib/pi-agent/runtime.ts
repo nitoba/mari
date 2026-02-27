@@ -63,39 +63,17 @@ export type PiModelDescriptor = {
   isUsingOAuth: boolean
 }
 
-type SessionCache = Map<string, Promise<AgentSession>>
-
 type RuntimeGlobals = typeof globalThis & {
-  __mariPiSessionCache?: SessionCache
   __mariPiResourceLoaderPromise?: Promise<ResourceLoader>
 }
 
 const runtimeGlobals = globalThis as RuntimeGlobals
 
-const SESSIONS_ROOT = path.join(process.cwd(), '.output', 'pi-agent-sessions')
 const mcpGatewayTool = createMcpGatewayTool()
 const agrotraceMcpTools = createAgrotraceMcpTools()
 
 const authStorage = AuthStorage.create()
 const modelRegistry = new ModelRegistry(authStorage)
-
-const sanitizeConversationId = (conversationId: string): string => {
-  const trimmedConversationId = conversationId.trim()
-  if (!trimmedConversationId) return 'default'
-
-  return trimmedConversationId.replace(/[^a-zA-Z0-9_-]/g, '-')
-}
-
-const getSessionCache = (): SessionCache => {
-  if (!runtimeGlobals.__mariPiSessionCache) {
-    runtimeGlobals.__mariPiSessionCache = new Map<
-      string,
-      Promise<AgentSession>
-    >()
-  }
-
-  return runtimeGlobals.__mariPiSessionCache
-}
 
 const normalizeString = (value: string | undefined): string | undefined => {
   if (!value) return undefined
@@ -437,16 +415,11 @@ const applySelectionToSession = async (
   }
 }
 
-const createConversationSession = async (
-  conversationId: string,
+export const createStatelessAgentSession = async (
   selection?: PiModelSelection,
 ): Promise<AgentSession> => {
-  const safeConversationId = sanitizeConversationId(conversationId)
-  const sessionDirectory = path.join(SESSIONS_ROOT, safeConversationId)
   const { model, thinkingLevel } = getModelAndThinking(selection)
   const resourceLoader = await getRuntimeResourceLoader()
-
-  await mkdir(sessionDirectory, { recursive: true })
 
   const { session } = await createAgentSession({
     authStorage,
@@ -455,42 +428,11 @@ const createConversationSession = async (
     model,
     modelRegistry,
     resourceLoader,
-    sessionManager: SessionManager.continueRecent(
-      process.cwd(),
-      sessionDirectory,
-    ),
+    sessionManager: SessionManager.inMemory(),
     thinkingLevel,
   })
 
   return session
-}
-
-export const getConversationSession = async (
-  conversationId: string,
-  selection?: PiModelSelection,
-): Promise<AgentSession> => {
-  const safeConversationId = sanitizeConversationId(conversationId)
-  const sessionCache = getSessionCache()
-  const cachedSession = sessionCache.get(safeConversationId)
-
-  if (cachedSession) {
-    const session = await cachedSession
-    await applySelectionToSession(session, selection)
-    return session
-  }
-
-  const sessionPromise = createConversationSession(
-    safeConversationId,
-    selection,
-  )
-  sessionCache.set(safeConversationId, sessionPromise)
-
-  try {
-    return await sessionPromise
-  } catch (error) {
-    sessionCache.delete(safeConversationId)
-    throw error
-  }
 }
 
 export const listAvailablePiModels = (): Array<PiModelDescriptor> =>

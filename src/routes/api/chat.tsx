@@ -4,14 +4,23 @@ import type { UIMessage } from 'ai'
 import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
 import type { AssistantMessageEvent } from '@mariozechner/pi-ai'
 import type { PiModelSelection } from '@/lib/pi-agent/runtime'
+import { buildAgrotraceCoordinatorPrompt } from '@/lib/pi-agent/agrotrace-router'
 import {
   PI_THINKING_LEVELS,
-  getConversationSession,
+  createStatelessAgentSession,
 } from '@/lib/pi-agent/runtime'
-import { buildAgrotraceCoordinatorPrompt } from '@/lib/pi-agent/agrotrace-router'
+import {
+  findCachedTurnByRequestId,
+  getOrCreateDbSession,
+} from '@/lib/db/persistence'
+import { acquireDbSessionLock, releaseDbSessionLock } from '@/lib/db/lock'
+import { loadContextForAgent } from '@/lib/db/context'
+import { appendTurn } from '@/lib/db/turn'
+import { maybeSummarizeSession } from '@/lib/chat/summarize'
 
 type ChatRequestBody = {
-  conversationId?: string
+  sessionId?: string // ✅ agora a sessão vem do client
+  requestId?: string
   messages?: Array<UIMessage>
   model?: {
     provider?: string
@@ -27,6 +36,12 @@ type ToolCallInfo = {
   toolName: string
 }
 
+type TurnEndEvent = {
+  type: 'turn_end'
+  message?: unknown
+  toolResults?: unknown[]
+}
+
 type StreamState = {
   finishReason: StreamFinishReason
   openSteps: number
@@ -38,6 +53,34 @@ type StreamState = {
   startedToolCalls: Set<string>
   availableToolCalls: Set<string>
 }
+
+type UIStreamWriteEvent =
+  | { type: 'start' }
+  | { type: 'start-step' }
+  | { type: 'finish-step' }
+  | { type: 'finish'; finishReason: StreamFinishReason }
+  | { type: 'text-start'; id: string }
+  | { type: 'text-delta'; id: string; delta: string }
+  | { type: 'text-end'; id: string }
+  | { type: 'reasoning-start'; id: string }
+  | { type: 'reasoning-delta'; id: string; delta: string }
+  | { type: 'reasoning-end'; id: string }
+  | { type: 'tool-input-start'; toolCallId: string; toolName: string }
+  | {
+      type: 'tool-input-available'
+      toolCallId: string
+      toolName: string
+      input: Record<string, unknown>
+    }
+  | { type: 'tool-input-delta'; toolCallId: string; inputTextDelta: string }
+  | {
+      type: 'tool-output-available'
+      toolCallId: string
+      output: Record<string, unknown>
+    }
+  | { type: 'tool-output-error'; toolCallId: string; errorText: string }
+  | { type: 'error'; errorText: string }
+  | { type: 'abort'; reason: string }
 
 const VALID_THINKING_LEVELS = new Set(PI_THINKING_LEVELS)
 
@@ -256,9 +299,34 @@ const ensureToolInputAvailable = (
   })
 }
 
+const createInitialStreamState = (): StreamState => ({
+  finishReason: 'stop',
+  openSteps: 0,
+  textPartIds: new Map<number, string>(),
+  reasoningPartIds: new Map<number, string>(),
+  toolCallInfoByContentIndex: new Map<number, ToolCallInfo>(),
+  toolNamesByCallId: new Map<string, string>(),
+  toolInputsByCallId: new Map<string, Record<string, unknown>>(),
+  startedToolCalls: new Set<string>(),
+  availableToolCalls: new Set<string>(),
+})
+
+/**
+ * Tap para gravar exatamente o que foi emitido (replay idêntico no cached)
+ */
+const writerTap = (
+  writer: UIMessageStreamWriter,
+  sink: Array<UIStreamWriteEvent>,
+) => ({
+  write: (evt: UIStreamWriteEvent) => {
+    sink.push(evt)
+    writer.write(evt as any)
+  },
+})
+
 const handleAssistantMessageEvent = (
   state: StreamState,
-  writer: UIMessageStreamWriter,
+  writer: { write: (evt: UIStreamWriteEvent) => void },
   assistantMessageEvent: AssistantMessageEvent,
 ): void => {
   switch (assistantMessageEvent.type) {
@@ -266,14 +334,23 @@ const handleAssistantMessageEvent = (
       return
 
     case 'text_start': {
-      ensureTextPartStarted(state, writer, assistantMessageEvent.contentIndex)
+      const existingId = state.textPartIds.get(
+        assistantMessageEvent.contentIndex,
+      )
+      const textPartId =
+        existingId ??
+        createChunkId(`text-${assistantMessageEvent.contentIndex}`)
+      if (!existingId) {
+        state.textPartIds.set(assistantMessageEvent.contentIndex, textPartId)
+        writer.write({ type: 'text-start', id: textPartId })
+      }
       return
     }
 
     case 'text_delta': {
       const textPartId = ensureTextPartStarted(
         state,
-        writer,
+        writer as any,
         assistantMessageEvent.contentIndex,
       )
       writer.write({
@@ -287,7 +364,7 @@ const handleAssistantMessageEvent = (
     case 'text_end': {
       const textPartId = ensureTextPartStarted(
         state,
-        writer,
+        writer as any,
         assistantMessageEvent.contentIndex,
       )
       writer.write({ type: 'text-end', id: textPartId })
@@ -296,18 +373,26 @@ const handleAssistantMessageEvent = (
     }
 
     case 'thinking_start': {
-      ensureReasoningPartStarted(
-        state,
-        writer,
+      const existingId = state.reasoningPartIds.get(
         assistantMessageEvent.contentIndex,
       )
+      const reasoningPartId =
+        existingId ??
+        createChunkId(`reasoning-${assistantMessageEvent.contentIndex}`)
+      if (!existingId) {
+        state.reasoningPartIds.set(
+          assistantMessageEvent.contentIndex,
+          reasoningPartId,
+        )
+        writer.write({ type: 'reasoning-start', id: reasoningPartId })
+      }
       return
     }
 
     case 'thinking_delta': {
       const reasoningPartId = ensureReasoningPartStarted(
         state,
-        writer,
+        writer as any,
         assistantMessageEvent.contentIndex,
       )
       writer.write({
@@ -321,7 +406,7 @@ const handleAssistantMessageEvent = (
     case 'thinking_end': {
       const reasoningPartId = ensureReasoningPartStarted(
         state,
-        writer,
+        writer as any,
         assistantMessageEvent.contentIndex,
       )
       writer.write({ type: 'reasoning-end', id: reasoningPartId })
@@ -345,7 +430,7 @@ const handleAssistantMessageEvent = (
       )
       ensureToolInputStarted(
         state,
-        writer,
+        writer as any,
         toolCallInfo.toolCallId,
         toolCallInfo.toolName,
       )
@@ -374,7 +459,7 @@ const handleAssistantMessageEvent = (
 
       ensureToolInputStarted(
         state,
-        writer,
+        writer as any,
         toolCallInfo.toolCallId,
         toolCallInfo.toolName,
       )
@@ -406,13 +491,13 @@ const handleAssistantMessageEvent = (
 
       ensureToolInputStarted(
         state,
-        writer,
+        writer as any,
         toolCallInfo.toolCallId,
         toolCallInfo.toolName,
       )
       ensureToolInputAvailable(
         state,
-        writer,
+        writer as any,
         toolCallInfo.toolCallId,
         toolCallInfo.toolName,
         toolInput,
@@ -443,7 +528,7 @@ const handleAssistantMessageEvent = (
 
 const handleSessionEvent = (
   state: StreamState,
-  writer: UIMessageStreamWriter,
+  writer: { write: (evt: UIStreamWriteEvent) => void },
   event: AgentSessionEvent,
 ): void => {
   switch (event.type) {
@@ -465,7 +550,6 @@ const handleSessionEvent = (
         writer.write({ type: 'finish-step' })
         state.openSteps -= 1
       }
-
       state.textPartIds.clear()
       state.reasoningPartIds.clear()
       state.toolCallInfoByContentIndex.clear()
@@ -489,10 +573,10 @@ const handleSessionEvent = (
       state.toolNamesByCallId.set(event.toolCallId, toolName)
       state.toolInputsByCallId.set(event.toolCallId, toolInput)
 
-      ensureToolInputStarted(state, writer, event.toolCallId, toolName)
+      ensureToolInputStarted(state, writer as any, event.toolCallId, toolName)
       ensureToolInputAvailable(
         state,
-        writer,
+        writer as any,
         event.toolCallId,
         toolName,
         toolInput,
@@ -505,10 +589,10 @@ const handleSessionEvent = (
         state.toolNamesByCallId.get(event.toolCallId) ?? event.toolName
       const toolInput = state.toolInputsByCallId.get(event.toolCallId) ?? {}
 
-      ensureToolInputStarted(state, writer, event.toolCallId, toolName)
+      ensureToolInputStarted(state, writer as any, event.toolCallId, toolName)
       ensureToolInputAvailable(
         state,
-        writer,
+        writer as any,
         event.toolCallId,
         toolName,
         toolInput,
@@ -534,17 +618,14 @@ const handleSessionEvent = (
   }
 }
 
-const createInitialStreamState = (): StreamState => ({
-  finishReason: 'stop',
-  openSteps: 0,
-  textPartIds: new Map<number, string>(),
-  reasoningPartIds: new Map<number, string>(),
-  toolCallInfoByContentIndex: new Map<number, ToolCallInfo>(),
-  toolNamesByCallId: new Map<string, string>(),
-  toolInputsByCallId: new Map<string, Record<string, unknown>>(),
-  startedToolCalls: new Set<string>(),
-  availableToolCalls: new Set<string>(),
-})
+/**
+ * Plugue sua auth aqui. Usei header pra facilitar.
+ */
+const getUserId = (request: Request): string => {
+  const headerUser = request.headers.get('x-user-id')
+  if (headerUser && headerUser.trim()) return headerUser.trim()
+  return '1'
+}
 
 export const Route = createFileRoute('/api/chat')({
   server: {
@@ -553,27 +634,154 @@ export const Route = createFileRoute('/api/chat')({
         const body = (await request.json()) as ChatRequestBody
         const messages = Array.isArray(body.messages) ? body.messages : []
         const requestedModelSelection = parseRequestedModelSelection(body)
-        const conversationId =
-          typeof body.conversationId === 'string' && body.conversationId.trim()
-            ? body.conversationId
-            : 'default'
+
+        const sessionId =
+          typeof body.sessionId === 'string' && body.sessionId.trim()
+            ? body.sessionId.trim()
+            : ''
+
+        const requestId =
+          typeof body.requestId === 'string' && body.requestId.trim()
+            ? body.requestId.trim()
+            : ''
+
+        const userId = getUserId(request)
+
+        if (!requestId) {
+          return new Response(JSON.stringify({ error: 'Missing requestId' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+
+        const { id: dbSessionId } = await getOrCreateDbSession(
+          userId,
+          sessionId,
+        )
 
         const lastUserMessage = [...messages]
           .reverse()
           .find((message) => message.role === 'user')
 
         const userText = lastUserMessage ? getMessageText(lastUserMessage) : ''
-        const session = await getConversationSession(
-          conversationId,
+
+        // Idempotência (cached)
+        const cached = await findCachedTurnByRequestId(
+          userId,
+          dbSessionId,
+          requestId,
+        )
+
+        if (cached && cached.length > 0) {
+          const stream = createUIMessageStream({
+            execute: async ({ writer }) => {
+              writer.write({ type: 'start' })
+              writer.write({ type: 'start-step' })
+
+              // 1) tool outputs a partir das mensagens toolResult
+              const toolResults = cached.filter((m) => m.role === 'toolResult')
+              for (const tr of toolResults) {
+                const msg = tr.content as any
+                const toolCallId =
+                  msg.toolCallId ?? msg.toolCall?.id ?? `tool-${tr.seq}`
+                const toolName = msg.toolName ?? msg.toolCall?.name ?? 'tool'
+
+                // output (ou erro)
+                if (msg.isError) {
+                  writer.write({
+                    type: 'tool-output-error',
+                    toolCallId,
+                    errorText: getToolErrorText(msg),
+                  })
+                } else {
+                  writer.write({
+                    type: 'tool-output-available',
+                    toolCallId,
+                    output: toToolOutput(msg),
+                  })
+                }
+              }
+
+              // 2) texto do assistente (mensagem final)
+              const assistantRow = cached.find((m) => m.role === 'assistant')
+              const assistantMsg = assistantRow?.content as any
+
+              // Extrai texto do content[] (blocos type:'text')
+              const text = Array.isArray(assistantMsg?.content)
+                ? assistantMsg.content
+                    .filter(
+                      (p: any) =>
+                        p?.type === 'text' && typeof p.text === 'string',
+                    )
+                    .map((p: any) => p.text)
+                    .join('')
+                    .trim()
+                : ''
+
+              if (text) {
+                const id = createChunkId('text-cached')
+                writer.write({ type: 'text-start', id })
+                writer.write({ type: 'text-delta', id, delta: text })
+                writer.write({ type: 'text-end', id })
+              }
+
+              writer.write({ type: 'finish-step' })
+              writer.write({ type: 'finish', finishReason: 'stop' })
+            },
+          })
+
+          return createUIMessageStreamResponse({ stream })
+        }
+
+        // lock por sessão (evita prompts simultâneos)
+        const lockToken = `req:${requestId}`
+        const ttlMs = 120_000
+        const locked = await acquireDbSessionLock({
+          userId,
+          sessionId: dbSessionId,
+          lockToken,
+          ttlMs,
+        })
+
+        if (!locked) {
+          const stream = createUIMessageStream({
+            execute: async ({ writer }) => {
+              writer.write({ type: 'start' })
+              writer.write({ type: 'error', errorText: 'SESSION_BUSY' })
+              writer.write({ type: 'finish', finishReason: 'error' })
+            },
+          })
+          return createUIMessageStreamResponse({ stream })
+        }
+
+        // cria sessão stateless e rehidrata contexto do DB (summary + tail)
+        const session = await createStatelessAgentSession(
           requestedModelSelection,
         )
+        const contextMessages = await loadContextForAgent({
+          userId,
+          sessionId: dbSessionId,
+          tailLimit: 80,
+        })
+        session.agent.replaceMessages(contextMessages.messages)
 
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
             const streamState = createInitialStreamState()
-            const unsubscribe = session.subscribe((event) => {
-              handleSessionEvent(streamState, writer, event)
-            })
+            const streamEvents: Array<UIStreamWriteEvent> = []
+            const tapped = writerTap(writer, streamEvents)
+
+            let lastTurnEnd: TurnEndEvent | null = null
+
+            const unsubscribe = session.subscribe(
+              (event: AgentSessionEvent) => {
+                handleSessionEvent(streamState, tapped, event)
+
+                if (event.type === 'turn_end') {
+                  lastTurnEnd = event as unknown as TurnEndEvent
+                }
+              },
+            )
 
             const abortListener = () => {
               void session.abort()
@@ -581,12 +789,12 @@ export const Route = createFileRoute('/api/chat')({
 
             request.signal.addEventListener('abort', abortListener)
 
-            writer.write({ type: 'start' })
+            tapped.write({ type: 'start' })
 
             try {
               if (!userText) {
                 streamState.finishReason = 'error'
-                writer.write({
+                tapped.write({
                   type: 'error',
                   errorText: 'Mensagem vazia. Envie um texto para continuar.',
                 })
@@ -598,13 +806,13 @@ export const Route = createFileRoute('/api/chat')({
             } catch (error) {
               if (request.signal.aborted) {
                 streamState.finishReason = 'error'
-                writer.write({
+                tapped.write({
                   type: 'abort',
                   reason: 'Client aborted request.',
                 })
               } else {
                 streamState.finishReason = 'error'
-                writer.write({
+                tapped.write({
                   type: 'error',
                   errorText: getUnknownErrorMessage(error),
                 })
@@ -614,14 +822,47 @@ export const Route = createFileRoute('/api/chat')({
               unsubscribe()
 
               while (streamState.openSteps > 0) {
-                writer.write({ type: 'finish-step' })
+                tapped.write({ type: 'finish-step' })
                 streamState.openSteps -= 1
               }
 
-              writer.write({
+              tapped.write({
                 type: 'finish',
                 finishReason: streamState.finishReason,
               })
+
+              // Persistência: turno + replay idêntico
+              try {
+                await appendTurn({
+                  userId,
+                  sessionId: dbSessionId,
+                  requestId,
+                  userText,
+                  assistantMessage:
+                    ((lastTurnEnd as unknown as TurnEndEvent)
+                      ?.message as any) ?? null,
+                  toolResults: Array.isArray(
+                    (lastTurnEnd as unknown as TurnEndEvent)?.toolResults,
+                  )
+                    ? ((lastTurnEnd as unknown as TurnEndEvent)!
+                        .toolResults as any[])
+                    : [],
+                })
+
+                // Summary (opcional)
+                await maybeSummarizeSession({
+                  userId,
+                  sessionId: dbSessionId,
+                  tailKeep: 80,
+                  buffer: 40,
+                })
+              } finally {
+                await releaseDbSessionLock({
+                  userId,
+                  sessionId: dbSessionId,
+                  lockToken,
+                })
+              }
             }
           },
         })
