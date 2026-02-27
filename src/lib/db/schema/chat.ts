@@ -58,13 +58,6 @@ export const chatMessages = mysqlTable(
     uniqueIndex('uq_messages_session_seq').on(t.sessionId, t.seq),
     index('idx_messages_session_request').on(t.sessionId, t.requestId),
     index('idx_messages_session_user').on(t.sessionId, t.userId),
-
-    // impede duplicação de user message para um requestId
-    uniqueIndex('uq_messages_user_request').on(
-      t.sessionId,
-      t.requestId,
-      t.role,
-    ),
   ],
 )
 
