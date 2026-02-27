@@ -14,8 +14,6 @@ export function PromptInput() {
   const { isLoading, userQuery, setUserQuery, submitUserQuery } =
     useChatContext()
 
-  console.log('PromptInput render', { isLoading, userQuery })
-
   const isDisabled = isLoading || userQuery.trim() === ''
 
   return (

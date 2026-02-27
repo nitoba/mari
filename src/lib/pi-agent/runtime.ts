@@ -1,14 +1,22 @@
-import { mkdir } from 'node:fs/promises'
+import { access, mkdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import path from 'node:path'
 import {
   AuthStorage,
+  DefaultResourceLoader,
   ModelRegistry,
   SessionManager,
   createAgentSession,
 } from '@mariozechner/pi-coding-agent'
-import type { AgentSession } from '@mariozechner/pi-coding-agent'
+import type {
+  AgentSession,
+  ResourceDiagnostic,
+  ResourceLoader,
+  Skill,
+} from '@mariozechner/pi-coding-agent'
 import type { Model } from '@mariozechner/pi-ai'
 import { createMcpGatewayTool } from '@/lib/pi-agent/mcp/tool'
+import { createAgrotraceMcpTools } from '@/lib/pi-agent/agrotrace-tools'
 
 export const PI_THINKING_LEVELS = [
   'off',
@@ -59,12 +67,14 @@ type SessionCache = Map<string, Promise<AgentSession>>
 
 type RuntimeGlobals = typeof globalThis & {
   __mariPiSessionCache?: SessionCache
+  __mariPiResourceLoaderPromise?: Promise<ResourceLoader>
 }
 
 const runtimeGlobals = globalThis as RuntimeGlobals
 
 const SESSIONS_ROOT = path.join(process.cwd(), '.output', 'pi-agent-sessions')
 const mcpGatewayTool = createMcpGatewayTool()
+const agrotraceMcpTools = createAgrotraceMcpTools()
 
 const authStorage = AuthStorage.create()
 const modelRegistry = new ModelRegistry(authStorage)
@@ -94,14 +104,148 @@ const normalizeString = (value: string | undefined): string | undefined => {
   return trimmedValue || undefined
 }
 
-const isMcpToolEnabled = (): boolean => {
-  const mcpToolFlag = normalizeString(process.env.PI_ENABLE_MCP_TOOL)
-  if (!mcpToolFlag) return true
+const isFlagEnabled = (
+  rawValue: string | undefined,
+  defaultValue = true,
+): boolean => {
+  const normalizedValue = normalizeString(rawValue)
+  if (!normalizedValue) return defaultValue
 
-  return !['0', 'false', 'off', 'no'].includes(mcpToolFlag.toLowerCase())
+  return !['0', 'false', 'off', 'no'].includes(normalizedValue.toLowerCase())
 }
 
-const getSessionCustomTools = () => (isMcpToolEnabled() ? [mcpGatewayTool] : [])
+const parseListEnv = (rawValue: string | undefined): Array<string> => {
+  const normalizedValue = normalizeString(rawValue)
+  if (!normalizedValue) return []
+
+  return normalizedValue
+    .split(/[,:\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const pathExists = async (candidatePath: string): Promise<boolean> => {
+  try {
+    await access(candidatePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const isMcpToolEnabled = (): boolean => {
+  return isFlagEnabled(process.env.PI_ENABLE_MCP_TOOL, true)
+}
+
+const isAgrotraceToolsEnabled = (): boolean => {
+  return isFlagEnabled(process.env.PI_ENABLE_AGROTRACE_TOOLS, true)
+}
+
+const isSkillsEnabled = (): boolean =>
+  isFlagEnabled(process.env.PI_ENABLE_SKILLS, true)
+
+const getDefaultExternalSkillPaths = (): Array<string> => {
+  const homePath = homedir()
+
+  return [
+    path.join(homePath, '.config', 'opencode', 'skills'),
+    path.join(homePath, '.claude', 'skills'),
+  ]
+}
+
+const getSkillAllowlist = (): Set<string> =>
+  new Set(
+    parseListEnv(process.env.PI_SKILL_ALLOWLIST).map((item) =>
+      item.toLowerCase(),
+    ),
+  )
+
+const resolveAdditionalSkillPaths = async (): Promise<Array<string>> => {
+  const configuredSkillPaths = parseListEnv(process.env.PI_SKILL_PATHS)
+  const skillPathCandidates = [
+    ...configuredSkillPaths,
+    ...getDefaultExternalSkillPaths(),
+  ]
+
+  const resolvedPaths: Array<string> = []
+  const seenPaths = new Set<string>()
+
+  for (const candidatePath of skillPathCandidates) {
+    const resolvedPath = path.resolve(candidatePath)
+    if (seenPaths.has(resolvedPath)) continue
+    seenPaths.add(resolvedPath)
+
+    if (await pathExists(resolvedPath)) {
+      resolvedPaths.push(resolvedPath)
+    }
+  }
+
+  return resolvedPaths
+}
+
+const buildSkillsOverride = (
+  allowlist: Set<string>,
+): ((base: {
+  skills: Array<Skill>
+  diagnostics: Array<ResourceDiagnostic>
+}) => {
+  skills: Array<Skill>
+  diagnostics: Array<ResourceDiagnostic>
+}) => {
+  if (allowlist.size === 0) {
+    return (base) => base
+  }
+
+  return (base) => ({
+    skills: base.skills.filter((skill) =>
+      allowlist.has(skill.name.toLowerCase()),
+    ),
+    diagnostics: base.diagnostics,
+  })
+}
+
+const createRuntimeResourceLoader = async (): Promise<ResourceLoader> => {
+  const allowlist = getSkillAllowlist()
+  const additionalSkillPaths = await resolveAdditionalSkillPaths()
+  const enableSkills = isSkillsEnabled()
+
+  const loader = new DefaultResourceLoader({
+    cwd: process.cwd(),
+    additionalSkillPaths,
+    noSkills: !enableSkills,
+    skillsOverride: buildSkillsOverride(allowlist),
+  })
+
+  await loader.reload()
+  return loader
+}
+
+const getRuntimeResourceLoader = async (): Promise<ResourceLoader> => {
+  if (!runtimeGlobals.__mariPiResourceLoaderPromise) {
+    runtimeGlobals.__mariPiResourceLoaderPromise = createRuntimeResourceLoader()
+  }
+
+  try {
+    return await runtimeGlobals.__mariPiResourceLoaderPromise
+  } catch (error) {
+    runtimeGlobals.__mariPiResourceLoaderPromise = undefined
+    throw error
+  }
+}
+
+const getSessionCustomTools = () => {
+  const sessionTools = []
+
+  if (isMcpToolEnabled()) {
+    sessionTools.push(mcpGatewayTool)
+  }
+
+  if (isAgrotraceToolsEnabled()) {
+    sessionTools.push(...agrotraceMcpTools)
+  }
+
+  return sessionTools
+}
 
 const formatMissingModelConfigurationError = (): Error => {
   const supportedKeys = PI_API_KEY_PROVIDER_CONFIGS.map(
@@ -300,6 +444,7 @@ const createConversationSession = async (
   const safeConversationId = sanitizeConversationId(conversationId)
   const sessionDirectory = path.join(SESSIONS_ROOT, safeConversationId)
   const { model, thinkingLevel } = getModelAndThinking(selection)
+  const resourceLoader = await getRuntimeResourceLoader()
 
   await mkdir(sessionDirectory, { recursive: true })
 
@@ -309,6 +454,7 @@ const createConversationSession = async (
     cwd: process.cwd(),
     model,
     modelRegistry,
+    resourceLoader,
     sessionManager: SessionManager.continueRecent(
       process.cwd(),
       sessionDirectory,

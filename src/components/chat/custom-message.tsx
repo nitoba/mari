@@ -6,7 +6,6 @@ import {
   MessageActions,
   MessageContent,
 } from '../prompt-kit/message'
-import { TypingLoader } from '../prompt-kit/loader'
 import { Button } from '../ui/button'
 import { Tool } from '../prompt-kit/tool'
 import {
@@ -51,6 +50,17 @@ const getMessageReasoning = (message: UIMessage): string =>
     .map((part) => part.text)
     .join('\n')
 
+const getReasoningState = (message: UIMessage) => {
+  const reasoningParts = message.parts.filter(isReasoningMessagePart)
+
+  return {
+    hasReasoning: reasoningParts.length > 0,
+    isReasoningStreaming: reasoningParts.some(
+      (part) => part.state === 'streaming',
+    ),
+  }
+}
+
 type AssistantMessageProps = {
   message: UIMessage
   isLastMessage: boolean
@@ -61,6 +71,7 @@ const AssistantMessage = memo(
     const toolParts = message.parts.filter(isToolMessagePart)
     const content = getMessageText(message)
     const reasoning = getMessageReasoning(message)
+    const { hasReasoning, isReasoningStreaming } = getReasoningState(message)
 
     return (
       <Message
@@ -69,11 +80,13 @@ const AssistantMessage = memo(
           'items-start',
         )}
       >
-        {reasoning && (
-          <Reasoning isStreaming>
-            <ReasoningTrigger>Show reasoning</ReasoningTrigger>
+        {hasReasoning && (
+          <Reasoning isStreaming={isReasoningStreaming}>
+            <ReasoningTrigger>
+              {isReasoningStreaming ? 'Thinking...' : 'Show reasoning'}
+            </ReasoningTrigger>
             <ReasoningContent className="ml-2 border-l-2 border-l-slate-200 px-2 pb-1 dark:border-l-slate-700">
-              {reasoning}
+              {reasoning || 'Thinking...'}
             </ReasoningContent>
           </Reasoning>
         )}

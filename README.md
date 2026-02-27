@@ -49,6 +49,19 @@ Campos suportados em `thinkingLevel`: `off`, `minimal`, `low`, `medium`, `high`,
 
 O backend agora registra uma tool gateway chamada `mcp` no Pi Agent (arquivo `src/lib/pi-agent/mcp/tool.ts`).
 
+Tambem registra tools de dominio Agrotrace (arquivo `src/lib/pi-agent/agrotrace-tools.ts`):
+
+- `agrotrace_search_entities`
+- `agrotrace_get_propriedade_context`
+- `agrotrace_get_atendimento_context`
+- `agrotrace_get_questionario_context`
+- `agrotrace_kpi_snapshot`
+
+Notas rapidas:
+
+- `agrotrace_search_entities` aceita `query` opcional (`*` para busca ampla no tenant)
+- o retorno inclui `meta.totalAvailable` e `meta.truncated` para evitar confundir lista limitada com total real
+
 - O Pi continua como cerebro de orquestracao (sessao, reasoning, tool loop).
 - O frontend continua igual, consumindo stream da Vercel AI SDK.
 - A integracao MCP usa o SDK oficial `@modelcontextprotocol/sdk` em `src/lib/pi-agent/mcp/manager.ts`.
@@ -87,6 +100,10 @@ Voce pode instruir o agente a usar a tool `mcp` nos modos:
 ### Variaveis de ambiente MCP
 
 - `PI_ENABLE_MCP_TOOL` (default: ligado)
+- `PI_ENABLE_AGROTRACE_TOOLS` (default: ligado)
+- `PI_ENABLE_SKILLS` (default: ligado)
+- `PI_SKILL_PATHS` (paths extras separados por `,` ou `:`)
+- `PI_SKILL_ALLOWLIST` (nomes de skills permitidos, separados por `,`)
 - `PI_MCP_CONFIG` (path custom do mcp.json)
 - `PI_MCP_IDLE_TIMEOUT_MINUTES` (fallback de timeout global)
 
@@ -99,3 +116,26 @@ export CONTEXT7_API_KEY="..."
 ## Subscriptions (futuro)
 
 A integracao usa `AuthStorage.create()` (arquivo de credenciais padrao do Pi), entao continua compativel com OAuth/subscriptions no futuro sem mudar arquitetura.
+
+## Skills para artefatos
+
+O runtime agora usa `DefaultResourceLoader` custom para incluir skills externas no Pi SDK (ex: `~/.config/opencode/skills`, `~/.claude/skills`) e skills locais do projeto.
+
+Skills locais adicionadas em `.pi/skills/`:
+
+- `pdf` (skill robusta para operacoes PDF, incluindo gerar PDF a partir de dados)
+- `data-spreadsheet` (gera/manipula XLSX e CSV)
+- `chart-visualization` (gera visualizacoes de dados via script JS)
+- `infographic-creator` (gera infograficos AntV orientados a dados)
+
+Quando a pergunta pedir exportacao (pdf/planilha/grafico), o coordenador inclui um `skill_plan` no prompt para priorizar essas skills.
+
+## Acesso aos arquivos gerados
+
+Arquivos gerados em `./.output/reports` podem ser acessados pelo endpoint:
+
+- listar assets: `GET /api/assets`
+- visualizar inline (quando suportado): `GET /api/assets?name=<arquivo>`
+- baixar: `GET /api/assets?name=<arquivo>&download=1`
+
+Extensoes com preview inline por default: `pdf`, `png`, `jpg`, `jpeg`, `svg`, `html`, `txt`.

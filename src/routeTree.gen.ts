@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as ChatChatIdRouteImport } from './routes/chat/$chatId'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiAssetsRouteImport } from './routes/api/assets'
 
 const ChatRouteRoute = ChatRouteRouteImport.update({
   id: '/chat',
@@ -40,16 +41,23 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAssetsRoute = ApiAssetsRouteImport.update({
+  id: '/api/assets',
+  path: '/api/assets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteRouteWithChildren
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/chat/$chatId': typeof ChatChatIdRoute
   '/chat/': typeof ChatIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/chat/$chatId': typeof ChatChatIdRoute
   '/chat': typeof ChatIndexRoute
@@ -58,21 +66,36 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/chat': typeof ChatRouteRouteWithChildren
+  '/api/assets': typeof ApiAssetsRoute
   '/api/chat': typeof ApiChatRoute
   '/chat/$chatId': typeof ChatChatIdRoute
   '/chat/': typeof ChatIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat' | '/api/chat' | '/chat/$chatId' | '/chat/'
+  fullPaths:
+    | '/'
+    | '/chat'
+    | '/api/assets'
+    | '/api/chat'
+    | '/chat/$chatId'
+    | '/chat/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/chat' | '/chat/$chatId' | '/chat'
-  id: '__root__' | '/' | '/chat' | '/api/chat' | '/chat/$chatId' | '/chat/'
+  to: '/' | '/api/assets' | '/api/chat' | '/chat/$chatId' | '/chat'
+  id:
+    | '__root__'
+    | '/'
+    | '/chat'
+    | '/api/assets'
+    | '/api/chat'
+    | '/chat/$chatId'
+    | '/chat/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChatRouteRoute: typeof ChatRouteRouteWithChildren
+  ApiAssetsRoute: typeof ApiAssetsRoute
   ApiChatRoute: typeof ApiChatRoute
 }
 
@@ -113,6 +136,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/assets': {
+      id: '/api/assets'
+      path: '/api/assets'
+      fullPath: '/api/assets'
+      preLoaderRoute: typeof ApiAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -133,6 +163,7 @@ const ChatRouteRouteWithChildren = ChatRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRouteRoute: ChatRouteRouteWithChildren,
+  ApiAssetsRoute: ApiAssetsRoute,
   ApiChatRoute: ApiChatRoute,
 }
 export const routeTree = rootRouteImport

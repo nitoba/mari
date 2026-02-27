@@ -15,8 +15,6 @@ export const Route = createFileRoute('/chat/$chatId')({
       (conversation) => conversation.id === params.chatId,
     )
 
-    console.log('selectedConversation', selectedConversation)
-
     if (!selectedConversation) {
       conversations = await context.queryClient.fetchQuery(
         chatConversationsQueryOptions(),

@@ -8,6 +8,7 @@ import {
   PI_THINKING_LEVELS,
   getConversationSession,
 } from '@/lib/pi-agent/runtime'
+import { buildAgrotraceCoordinatorPrompt } from '@/lib/pi-agent/agrotrace-router'
 
 type ChatRequestBody = {
   conversationId?: string
@@ -290,6 +291,7 @@ const handleAssistantMessageEvent = (
         assistantMessageEvent.contentIndex,
       )
       writer.write({ type: 'text-end', id: textPartId })
+      state.textPartIds.delete(assistantMessageEvent.contentIndex)
       return
     }
 
@@ -323,6 +325,7 @@ const handleAssistantMessageEvent = (
         assistantMessageEvent.contentIndex,
       )
       writer.write({ type: 'reasoning-end', id: reasoningPartId })
+      state.reasoningPartIds.delete(assistantMessageEvent.contentIndex)
       return
     }
 
@@ -448,6 +451,10 @@ const handleSessionEvent = (
       state.textPartIds.clear()
       state.reasoningPartIds.clear()
       state.toolCallInfoByContentIndex.clear()
+      state.startedToolCalls.clear()
+      state.availableToolCalls.clear()
+      state.toolNamesByCallId.clear()
+      state.toolInputsByCallId.clear()
       writer.write({ type: 'start-step' })
       state.openSteps += 1
       return
@@ -462,6 +469,10 @@ const handleSessionEvent = (
       state.textPartIds.clear()
       state.reasoningPartIds.clear()
       state.toolCallInfoByContentIndex.clear()
+      state.startedToolCalls.clear()
+      state.availableToolCalls.clear()
+      state.toolNamesByCallId.clear()
+      state.toolInputsByCallId.clear()
       return
     }
 
@@ -580,7 +591,9 @@ export const Route = createFileRoute('/api/chat')({
                   errorText: 'Mensagem vazia. Envie um texto para continuar.',
                 })
               } else {
-                await session.prompt(userText)
+                const coordinatorPrompt =
+                  buildAgrotraceCoordinatorPrompt(userText)
+                await session.prompt(coordinatorPrompt)
               }
             } catch (error) {
               if (request.signal.aborted) {
