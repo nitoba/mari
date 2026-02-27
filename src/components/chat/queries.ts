@@ -35,13 +35,13 @@ export const chatQueryKeys = {
  * TanStack Start permite ter contexto do request no serverFn dependendo do setup.
  * Se você já tem um helper `getUser()` no server, use ele aqui.
  */
-async function getUserIdOrThrow(): Promise<string> {
+async function getUserIdOrThrow(): Promise<number> {
   const headers = getRequestHeaders()
   const session = await auth.api.getSession({ headers })
   if (!session) {
     throw new Error('Unauthorized')
   }
-  return session.user.id
+  return session.user.id as unknown as number
 }
 
 /**
@@ -51,7 +51,7 @@ async function getUserIdOrThrow(): Promise<string> {
 function extractTextFromPiAgentMessage(agentMessage: unknown): string {
   if (!agentMessage || typeof agentMessage !== 'object') return ''
   const msg = agentMessage as any
-  const blocks = msg.content
+  const blocks = msg?.content
   if (!Array.isArray(blocks)) return ''
 
   return blocks
@@ -86,7 +86,8 @@ function mapDbRowsToChatMessages(
   const out: Array<ChatMessage> = []
 
   for (const row of rows) {
-    if (row.role === 'toolResult') continue
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (!row || row.role === 'toolResult') continue
 
     const text = extractTextFromPiAgentMessage(row.content)
     const uiRole: ChatMessage['role'] =
@@ -101,7 +102,7 @@ function mapDbRowsToChatMessages(
  * Preview: última mensagem visível (user/assistant).
  */
 async function getConversationPreview(
-  userId: string,
+  userId: number,
   sessionId: string,
 ): Promise<string | null> {
   const [row] = await db
@@ -120,6 +121,9 @@ async function getConversationPreview(
     .orderBy(desc(chatMessages.seq))
     .limit(1)
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (row === null) return null
+
   const text = extractTextFromPiAgentMessage(row.content)
   return text || null
 }
@@ -128,7 +132,7 @@ async function getConversationPreview(
  * Count: quantas mensagens visíveis (user/assistant).
  */
 async function getVisibleMessageCount(
-  userId: string,
+  userId: number,
   sessionId: string,
 ): Promise<number> {
   const rows = await db

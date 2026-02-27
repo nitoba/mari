@@ -13,7 +13,7 @@ export const chatSessions = mysqlTable(
   'chat_sessions',
   {
     id: varchar('id', { length: 36 }).primaryKey(),
-    userId: varchar('user_id', { length: 36 }).notNull(),
+    userId: int('user_id').notNull(),
     title: varchar('title', { length: 255 }),
     createdAt: datetime('created_at', { mode: 'date' }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date' }).notNull(),
@@ -44,7 +44,7 @@ export const chatMessages = mysqlTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()), // UUID
     sessionId: varchar('session_id', { length: 36 }).notNull(),
-    userId: varchar('user_id', { length: 36 }).notNull(),
+    userId: int('user_id').notNull(),
 
     seq: int('seq').notNull(), // ordem determinística na sessão
     role: varchar('role', { length: 16 }).notNull(), // user | assistant | toolResult
@@ -64,9 +64,11 @@ export const chatMessages = mysqlTable(
 export const chatSessionSummaries = mysqlTable(
   'chat_session_summaries',
   {
-    id: varchar('id', { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()), // UUID
+    id: varchar('id', { length: 36 })
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()), // UUID
     sessionId: varchar('session_id', { length: 36 }).notNull(),
-    userId: varchar('user_id', { length: 36 }).notNull(),
+    userId: int('user_id').notNull(),
 
     // resumo cobre mensagens até seq = coveredToSeq
     coveredToSeq: int('covered_to_seq').notNull(),

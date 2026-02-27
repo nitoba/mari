@@ -8,7 +8,6 @@ import { db } from './db/db'
 import * as schema from './db/schema/auth'
 import type { User } from 'better-auth'
 
-
 type CustomUser = User & {
   id: number
   pessoaId: number
@@ -27,7 +26,7 @@ export const auth = betterAuth({
   user: {
     fields: {
       createdAt: 'criado_em',
-      updatedAt: 'atualizado_em'
+      updatedAt: 'atualizado_em',
     },
     additionalFields: {
       pessoaId: {
@@ -42,10 +41,10 @@ export const auth = betterAuth({
       async hash(password) {
         return await hash(password, 12)
       },
-      async verify({ hash: passwordHashed ,password }) {
+      async verify({ hash: passwordHashed, password }) {
         return await compare(password, passwordHashed)
-      }
-    }
+      },
+    },
   },
   plugins: [
     tanstackStartCookies(),
@@ -72,6 +71,7 @@ export const auth = betterAuth({
       return {
         user: {
           ...user,
+          id: Number(user.id), // Ensure id is a number
           name, // Add/Override name from pessoa table
         },
         session,

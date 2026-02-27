@@ -1,7 +1,7 @@
 CREATE TABLE `chat_messages` (
     `id` varchar(36) NOT NULL,
     `session_id` varchar(36) NOT NULL,
-    `user_id` varchar(36) NOT NULL,
+    `user_id` int UNSIGNED NOT NULL,
     `seq` int NOT NULL,
     `role` varchar(16) NOT NULL,
     `content` json NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE `chat_messages` (
 CREATE TABLE `chat_session_summaries` (
     `id` varchar(36) NOT NULL,
     `session_id` varchar(36) NOT NULL,
-    `user_id` varchar(36) NOT NULL,
+    `user_id` int UNSIGNED NOT NULL,
     `covered_to_seq` int NOT NULL,
     `summary_message` json NOT NULL,
     `created_at` datetime NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE `chat_session_summaries` (
 --> statement-breakpoint
 CREATE TABLE `chat_sessions` (
     `id` varchar(36) NOT NULL,
-    `user_id` varchar(36) NOT NULL,
+    `user_id` int UNSIGNED NOT NULL,
     `title` varchar(255),
     `created_at` datetime NOT NULL,
     `updated_at` datetime NOT NULL,

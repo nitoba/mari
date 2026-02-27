@@ -56,7 +56,7 @@ export async function loadContextForAgent(params: {
 
   const messages = []
   if (summaryMessage) messages.push(summaryMessage)
-  messages.push(...tailRows.map((r) => r.content))
+  if (tailRows) messages.push(...tailRows.map((r) => r.content))
 
   return { messages, summarySeq: sess.summarySeq }
 }
