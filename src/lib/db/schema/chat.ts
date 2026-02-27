@@ -1,12 +1,12 @@
 // db/schema.ts (trecho)
 import {
-  mysqlTable,
-  varchar,
   datetime,
+  index,
   int,
   json,
-  index,
+  mysqlTable,
   uniqueIndex,
+  varchar,
 } from 'drizzle-orm/mysql-core'
 
 export const chatSessions = mysqlTable(
@@ -64,7 +64,7 @@ export const chatMessages = mysqlTable(
 export const chatSessionSummaries = mysqlTable(
   'chat_session_summaries',
   {
-    id: varchar('id', { length: 36 }).primaryKey(), // UUID
+    id: varchar('id', { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID()), // UUID
     sessionId: varchar('session_id', { length: 36 }).notNull(),
     userId: varchar('user_id', { length: 36 }).notNull(),
 
