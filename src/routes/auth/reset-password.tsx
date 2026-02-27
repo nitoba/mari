@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import {
   Card,
   CardContent,
@@ -131,10 +132,9 @@ function ResetPasswordPage() {
                 return (
                   <Field data-invalid={isInvalid}>
                     <FieldLabel htmlFor={field.name}>Nova Senha</FieldLabel>
-                    <Input
+                    <PasswordInput
                       id={field.name}
                       name={field.name}
-                      type="password"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
@@ -159,10 +159,9 @@ function ResetPasswordPage() {
                     <FieldLabel htmlFor={field.name}>
                       Confirmar Nova Senha
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id={field.name}
                       name={field.name}
-                      type="password"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}

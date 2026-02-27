@@ -10,4 +10,4 @@ const connectionConfig = {
 
 const connectionString = `mysql://${connectionConfig.user}:${connectionConfig.password}@${connectionConfig.host}:${connectionConfig.port}/${connectionConfig.database}`
 
-export const db = drizzle(connectionString, {})
+export const db = drizzle(connectionString, {logger: true})

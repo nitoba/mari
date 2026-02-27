@@ -32,9 +32,7 @@ export const auth = betterAuth({
     additionalFields: {
       pessoaId: {
         type: 'number',
-        fieldName: 'pessoa_id',
-        required: true,
-        input: false,
+        fieldName: 'pessoaId',
       },
     },
   },
