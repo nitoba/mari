@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
-import { db } from './db'
-import { chatMessages, chatSessions } from './schema/chat'
+import { db } from '../db/db'
+import { chatMessages, chatSessions } from '../db/schema/chat'
 
 type AgentMessage = any
 type ChatRole = 'user' | 'assistant' | 'toolResult'

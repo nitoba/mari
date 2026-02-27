@@ -1,6 +1,6 @@
 // db/persistence.ts
-import { db } from './db'
-import { chatMessages, chatSessions, ChatRole } from './schema/chat'
+import { db } from '../db/db'
+import { chatMessages, chatSessions, ChatRole } from '../db/schema/chat'
 import { and, desc, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 

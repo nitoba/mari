@@ -1,7 +1,7 @@
 // db/context.ts
-import { db } from './db'
-import { chatMessages, chatSessions } from './schema/chat'
-import { chatSessionSummaries } from './schema/chat' // ajuste import
+import { db } from '../db/db'
+import { chatMessages, chatSessions } from '../db/schema/chat'
+import { chatSessionSummaries } from '../db/schema/chat' // ajuste import
 import { and, asc, eq, gt } from 'drizzle-orm'
 
 export async function loadContextForAgent(params: {

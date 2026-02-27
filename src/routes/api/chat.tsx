@@ -12,10 +12,10 @@ import {
 import {
   findCachedTurnByRequestId,
   getOrCreateDbSession,
-} from '@/lib/db/persistence'
-import { acquireDbSessionLock, releaseDbSessionLock } from '@/lib/db/lock'
-import { loadContextForAgent } from '@/lib/db/context'
-import { appendTurn } from '@/lib/db/turn'
+} from '@/lib/chat/persistence'
+import { acquireDbSessionLock, releaseDbSessionLock } from '@/lib/chat/lock'
+import { loadContextForAgent } from '@/lib/chat/context'
+import { appendTurn } from '@/lib/chat/turn'
 import { maybeSummarizeSession } from '@/lib/chat/summarize'
 
 type ChatRequestBody = {

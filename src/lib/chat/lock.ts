@@ -1,6 +1,6 @@
 // db/lock.ts
-import { db } from './db'
-import { chatSessions } from './schema/chat'
+import { db } from '../db/db'
+import { chatSessions } from '../db/schema/chat'
 import { and, eq, lt, or, isNull } from 'drizzle-orm'
 
 export async function acquireDbSessionLock(params: {
